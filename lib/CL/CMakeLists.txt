@@ -258,7 +258,7 @@ else()
 endif()
 
 add_library("pocl_cache" OBJECT "pocl_cache.c")
-if(BUILD_SHARED_LIBS AND MSVC)
+if(BUILD_SHARED_LIBS AND WIN32)
   # Inject __declspec(dllexport).
   target_compile_definitions("pocl_cache" PRIVATE EXPORT_POCL_LIB)
   target_compile_definitions("pocl_cache" INTERFACE IMPORT_POCL_LIB)
@@ -282,7 +282,7 @@ if (ENABLE_LLVM)
   add_library("lib_cl_llvm" OBJECT ${LLVM_API_SOURCES})
   target_include_directories(lib_cl_llvm PRIVATE ${LLVM_INCLUDE_DIRS})
   harden("lib_cl_llvm")
-  if(BUILD_SHARED_LIBS AND MSVC)
+  if(BUILD_SHARED_LIBS AND WIN32)
     # Inject __declspec(dllexport).
     target_compile_definitions(lib_cl_llvm PRIVATE EXPORT_POCL_LIB)
     target_compile_definitions(lib_cl_llvm INTERFACE IMPORT_POCL_LIB)
@@ -328,7 +328,7 @@ add_library("libpocl_unlinked_objs" OBJECT ${POCL_LIB_SOURCES})
 target_include_directories(libpocl_unlinked_objs
   PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/STC/include)
 
-if(BUILD_SHARED_LIBS AND MSVC)
+if(BUILD_SHARED_LIBS AND WIN32)
   # Inject __declspec(dllexport).
   target_compile_definitions(libpocl_unlinked_objs PRIVATE EXPORT_POCL_LIB)
   target_compile_definitions(libpocl_unlinked_objs INTERFACE IMPORT_POCL_LIB)
@@ -398,7 +398,7 @@ set(POCL_TRANSITIVE_LIBS ${POCL_PRIVATE_LINK_LIBRARIES} PARENT_SCOPE)
 #################################################################
 
 add_library("${POCL_LIBRARY_NAME}" ${LIBPOCL_OBJS})
-if(BUILD_SHARED_LIBS AND MSVC)
+if(BUILD_SHARED_LIBS AND WIN32)
   # Inject __declspec(dllexport).
   target_compile_definitions("${POCL_LIBRARY_NAME}" PRIVATE EXPORT_POCL_LIB)
   target_compile_definitions("${POCL_LIBRARY_NAME}" INTERFACE IMPORT_POCL_LIB)
@@ -406,11 +406,11 @@ endif()
 
 harden("${POCL_LIBRARY_NAME}")
 
-if((UNIX OR MINGW) AND (NOT APPLE))
+if(UNIX AND (NOT APPLE))
   target_link_options("${POCL_LIBRARY_NAME}" PRIVATE "LINKER:--exclude-libs,ALL")
 endif()
 if(MINGW)
-  target_link_options("${POCL_LIBRARY_NAME}" PRIVATE "LINKER:--enable-auto-import,--enable-runtime-pseudo-reloc")
+  target_link_options("${POCL_LIBRARY_NAME}" PRIVATE "LINKER:--exclude-all-symbols,--enable-auto-import,--enable-runtime-pseudo-reloc")
 endif()
 
 set_target_properties("${POCL_LIBRARY_NAME}" PROPERTIES SOVERSION "${LIB_API_VERSION}"
