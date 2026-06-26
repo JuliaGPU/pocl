@@ -40,7 +40,7 @@
    0 marks an invalid/undefined object. */
 typedef uint64_t pocl_obj_id_t;
 
-#if defined(EXPORT_POCL_LIB) && defined(_MSC_VER)
+#if defined(EXPORT_POCL_LIB) && defined(_WIN32)
 /* To successfully export OpenCL API, the dllexport must be placed on
  * both the declaration and the definition as MSVC requires that both
  * of them have the same attributes.
