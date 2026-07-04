@@ -1010,6 +1010,10 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
            // A target might want to expose the C99 printf in
            // case not supporting the OpenCL 1.2 printf.
            F->getName() != "printf" && F->getName() != pocl_sampler_handler &&
+           // With ENABLE_PRINTF_IMMEDIATE_FLUSH the printf machinery references
+           // pocl_flush_printf_buffer, a host-only symbol the in-process JIT
+           // resolves from process symbols; leave it as an external declaration.
+           F->getName() != "pocl_flush_printf_buffer" &&
            !F->getName().starts_with("llvm.") &&
            F->getName() != BARRIER_FUNCTION_NAME &&
            F->getName() != "__pocl_local_mem_alloca" &&
