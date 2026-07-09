@@ -889,7 +889,7 @@ static void replaceIntrinsics(llvm::Module *Program, const llvm::Module *Lib,
 using namespace pocl;
 
 int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
-         cl_device_id ClDev, bool StripAllDebugInfo) {
+         cl_device_id ClDev, bool StripAllDebugInfo, bool ErrorOnUnresolved) {
 
   assert(Program);
   assert(Lib);
@@ -985,45 +985,47 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
   convertAddrSpaceOperator(Program->getFunction("__to_private"), Log);
   convertAddrSpaceOperator(Program->getFunction("__to_global"), Log);
 
-  // check all function declarations in the program
-  // *after* we have linked functions from the library
-  DeclaredFunctions.clear();
-  for (auto &F : *Program) {
-    if (F.isDeclaration()) {
-      DB_PRINT("Post-link: %s is not defined\n", F.getName().data());
-      DeclaredFunctions.insert(F.getName());
-      continue;
-    }
-  }
-
-  bool FoundAllUndefined = true;
-  // this one is a handled with a special pocl LLVM pass
-  StringRef pocl_sampler_handler("__translate_sampler_initializer");
-
-  if (!modIsNvptx(Program)) {
-    for (auto &DeclIter : DeclaredFunctions) {
-      llvm::StringRef FName = DeclIter.getKey();
-      Function *F = Program->getFunction(FName);
-
-      if ((F == NULL) ||
-          (F->isDeclaration() &&
-           // A target might want to expose the C99 printf in
-           // case not supporting the OpenCL 1.2 printf.
-           F->getName() != "printf" && F->getName() != pocl_sampler_handler &&
-           !F->getName().starts_with("llvm.") &&
-           F->getName() != BARRIER_FUNCTION_NAME &&
-           F->getName() != "__pocl_local_mem_alloca" &&
-           F->getName() != "__pocl_work_group_alloca")) {
-        Log.append("Cannot find symbol ");
-        Log.append(FName.str());
-        Log.append(" in kernel library\n");
-        FoundAllUndefined = false;
+  if (ErrorOnUnresolved) {
+    // check all function declarations in the program
+    // *after* we have linked functions from the library
+    DeclaredFunctions.clear();
+    for (auto &F : *Program) {
+      if (F.isDeclaration()) {
+        DB_PRINT("Post-link: %s is not defined\n", F.getName().data());
+        DeclaredFunctions.insert(F.getName());
+        continue;
       }
     }
-  }
 
-  if (!FoundAllUndefined)
-    return -1;
+    bool FoundAllUndefined = true;
+    // this one is a handled with a special pocl LLVM pass
+    StringRef pocl_sampler_handler("__translate_sampler_initializer");
+
+    if (!modIsNvptx(Program)) {
+      for (auto &DeclIter : DeclaredFunctions) {
+        llvm::StringRef FName = DeclIter.getKey();
+        Function *F = Program->getFunction(FName);
+
+        if ((F == NULL) ||
+            (F->isDeclaration() &&
+             // A target might want to expose the C99 printf in
+             // case not supporting the OpenCL 1.2 printf.
+             F->getName() != "printf" && F->getName() != pocl_sampler_handler &&
+             !F->getName().starts_with("llvm.") &&
+             F->getName() != BARRIER_FUNCTION_NAME &&
+             F->getName() != "__pocl_local_mem_alloca" &&
+             F->getName() != "__pocl_work_group_alloca")) {
+          Log.append("Cannot find symbol ");
+          Log.append(FName.str());
+          Log.append(" in kernel library\n");
+          FoundAllUndefined = false;
+        }
+      }
+    }
+
+    if (!FoundAllUndefined)
+      return -1;
+  }
 
   shared_copy(Program, Lib, Log, vvm);
 
@@ -1279,4 +1281,3 @@ bool moveProgramScopeVarsOutOfProgramBc(llvm::LLVMContext *Context,
 }
 
 /* vim: set expandtab ts=2 : */
-
