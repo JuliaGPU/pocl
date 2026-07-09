@@ -133,6 +133,12 @@ struct PoclLLVMContextData
 #endif
 };
 
+/* Return the device's OpenCL C built-in function library bitcode, parsed into
+ * the context's LLVMContext and cached in its kernelLibraryMap. Returns NULL if
+ * the library cannot be found. */
+llvm::Module *getKernelLibrary(cl_device_id device,
+                               PoclLLVMContextData *llvm_ctx);
+
 #ifdef __GNUC__
 #pragma GCC visibility pop
 #endif
