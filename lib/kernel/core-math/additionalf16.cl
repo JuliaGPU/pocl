@@ -2,8 +2,8 @@
 
 /* FP16 overloads for math builtins with a Clang/LLVM FP16 lowering: the
    __builtin_elementwise_* intrinsics (scalar + @llvm.<op>.vNf16, so they
-   vectorize without SLEEF) plus fmod and frexp, which map to single LLVM
-   intrinsics.
+   vectorize without SLEEF) plus fmod, which maps to a single LLVM
+   intrinsic.
  *
  * These supplement the kernel library only in the non-vectorized configuration
  * (ENABLE_HOST_CPU_VECTORIZE_BUILTINS=OFF). When vectorization is ON the generic
@@ -14,7 +14,8 @@
  * Functions without a native FP16 builtin (logb, ilogb, ldexp, rootn, pown,
  * remainder, nextafter, powr, modf, remquo) are in promotedf16.cl. That file is
  * compiled in both configurations because the vectorized generic path does not
- * cover those overloads either. (sincos and lgamma_r half are provided by
+ * cover those overloads either. frexp is there too, promoted to pocl's own
+ * float frexp rather than llvm.frexp. (sincos and lgamma_r half are provided by
  * core-math/sincosf16.cl and lgammaf16.cl.) */
 
 #undef isfinite
@@ -59,18 +60,7 @@ IMPLEMENT_FP16_FDIM (half4)
 IMPLEMENT_FP16_FDIM (half8)
 IMPLEMENT_FP16_FDIM (half16)
 
-/* fmod -> @llvm.frem and frexp -> @llvm.frexp are single LLVM intrinsics (no
-   libm libcall), so they belong with the Clang-builtin-backed overloads. */
+/* fmod -> @llvm.frem is a single LLVM intrinsic (no libm libcall), so it
+   belongs with the Clang-builtin-backed overloads. */
 half _CL_OVERLOADABLE fmod (half a, half b) { return (half)__builtin_fmodf ((float)a, (float)b); }
 DEFINE_FP16_EXPR_V_VV (fmod)
-
-half _CL_OVERLOADABLE
-frexp (half x, private int *e) { return (half)__builtin_frexpf ((float)x, e); }
-#define IMPLEMENT_FP16_FREXP_AS(AS)                                          \
-  half _CL_OVERLOADABLE frexp (half x, AS int *e)                            \
-  { int t; half r = frexp (x, &t); *e = t; return r; }
-IMPLEMENT_FP16_FREXP_AS (local)
-IMPLEMENT_FP16_FREXP_AS (global)
-#ifdef __opencl_c_generic_address_space
-IMPLEMENT_FP16_FREXP_AS (generic)
-#endif
