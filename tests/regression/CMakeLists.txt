@@ -218,8 +218,7 @@ if(X86 AND KERNELLIB_HOST_DISTRO_VARIANTS)
   endforeach()
 endif()
 
-# Windows worker threads (std::thread) still get the default stack size
-add_test_pocl(NAME "regression/test_large_private_workgroup" LABELS "mingw_fail;win_fail"
+add_test_pocl(NAME "regression/test_large_private_workgroup"
   COMMAND "test_large_private_workgroup")
 
 add_test_pocl(NAME "regression/test_issue_893" COMMAND "test_issue_893")
