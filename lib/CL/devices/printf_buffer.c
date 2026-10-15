@@ -101,12 +101,13 @@ DEFINE_PRINT_INTS (ulong, int64_t, uint64_t)
 
 /* Note: NANs are printed always positive.
  * This is required to pass 1.2 conformance test. */
-#define DEFINE_PRINT_FLOATS(FLOAT_TYPE)                                       \
-  void __pocl_print_floats_##FLOAT_TYPE (param_t *p, const void *vals, int n) \
+#define DEFINE_PRINT_FLOATS(NAME, STORAGE_TYPE, TO_FLOAT_T)                   \
+  void __pocl_print_floats_##NAME (param_t *p, const void *vals, int n)       \
   {                                                                           \
     const char *NANs[2] = { "nan", "NAN" };                                   \
     const char *INFs[2] = { "inf", "INF" };                                   \
-    FLOAT_TYPE val;                                                           \
+    STORAGE_TYPE raw;                                                         \
+    FLOAT_T val;                                                              \
     DEBUG_PRINTF (("[printf:floats:n=%d]\n", n));                             \
     flags_t saved_user_flags = p->flags;                                      \
     for (int d = 0; d < n; ++d)                                               \
@@ -115,8 +116,9 @@ DEFINE_PRINT_INTS (ulong, int64_t, uint64_t)
         p->flags = saved_user_flags;                                          \
         if (d != 0)                                                           \
           __pocl_printf_putcf (p, ',');                                       \
-        memcpy (&val, vals, sizeof (FLOAT_TYPE));                             \
-        vals = (char *)vals + sizeof (FLOAT_TYPE);                            \
+        memcpy (&raw, vals, sizeof (STORAGE_TYPE));                           \
+        vals = (char *)vals + sizeof (STORAGE_TYPE);                          \
+        val = TO_FLOAT_T (raw);                                               \
         const char *other = NULL;                                             \
         if (isnan (val))                                                      \
           other = NANs[p->flags.uc];                                          \
@@ -133,17 +135,35 @@ DEFINE_PRINT_INTS (ulong, int64_t, uint64_t)
           }                                                                   \
         else                                                                  \
           {                                                                   \
-            __pocl_printf_float (p, (FLOAT_T)val);                            \
+            __pocl_printf_float (p, val);                                     \
           }                                                                   \
       }                                                                       \
     DEBUG_PRINTF (("[printf:floats:done]\n"));                                \
   }
 
-#ifdef HOST_COMPILER_SUPPORTS_FLOAT16
-DEFINE_PRINT_FLOATS (_Float16)
-#endif
-DEFINE_PRINT_FLOATS (float)
-DEFINE_PRINT_FLOATS (double)
+/* Half is widened in software rather than through _Float16: GCC lowers
+   _Float16 -> double to libgcc's __extendhfdf2, which x86 libgcc_s only
+   exports from GCC 12 on, so an older libgcc_s already loaded into the process
+   (e.g. by a profiler's preloaded library) kept libpocl from loading. The
+   conversion is exact, so the output is the same. */
+static double
+half_to_double (uint16_t h)
+{
+  unsigned exponent = (h >> 10) & 0x1f;
+  unsigned mantissa = h & 0x3ff;
+  double magnitude;
+  if (exponent == 0x1f)
+    magnitude = mantissa ? NAN : INFINITY;
+  else if (exponent == 0)
+    magnitude = ldexp (mantissa, -24);
+  else
+    magnitude = ldexp (mantissa | 0x400, (int)exponent - 25);
+  return (h & 0x8000) ? -magnitude : magnitude;
+}
+
+DEFINE_PRINT_FLOATS (half, uint16_t, half_to_double)
+DEFINE_PRINT_FLOATS (float, float, )
+DEFINE_PRINT_FLOATS (double, double, )
 
 #undef DEFINE_PRINT_FLOATS
 
@@ -562,16 +582,8 @@ __pocl_printf_format_full (param_t *p, char *buffer, uint32_t buffer_size)
                           }
                           else
                           {
-#ifdef HOST_COMPILER_SUPPORTS_FLOAT16
-                            __pocl_print_floats__Float16 (p, buffer,
-                                                          vector_length);
-#else
-                            POCL_MSG_ERR ("printf error: host-side "
-                                          "support for FP16 missing\n");
-                            __pocl_print_ints_ushort (p, buffer,
-                                                      vector_length,
-                                                      0);
-#endif
+                            __pocl_print_floats_half (p, buffer,
+                                                      vector_length);
                             // half2 vectors <64 bits are stored in 64bits
                             if (alloca_length < pointer_size_bytes)
                                 alloca_length = pointer_size_bytes;
