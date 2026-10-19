@@ -30,6 +30,7 @@
 #include "config2.h"
 
 #include "common.h"
+#include "common_driver.h"
 #include "common_utils.h"
 #include "cpuinfo.h"
 #include "pocl_builtin_kernels.h"
@@ -182,6 +183,237 @@ pocl_cpu_setup_rm_and_ftz (cl_device_id dev, cl_program prog)
     pocl_set_ftz (1);
   /* Rounding mode change is deprecated & only supported by OpenCL 1.0 */
   pocl_set_default_rm ();
+}
+
+/* cl_pocl_host_kernel: the floating-point environment kernels run in (round
+   to nearest, FTZ per the build, all exceptions masked), entered and left
+   around a run on an application thread. Each register is read once and only
+   written when the modes differ, which they usually don't. */
+#if defined(POCL_ON_X86) && defined(_MM_FLUSH_ZERO_MASK)                      \
+  && defined(_MM_DENORMALS_ZERO_MASK)
+#define HOST_KERNEL_FP_X86
+typedef struct
+{
+  unsigned mxcsr;
+} host_fp_env;
+#elif defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+#define HOST_KERNEL_FP_AARCH64
+typedef struct
+{
+  uint64_t fpcr;
+  uint64_t fpsr;
+} host_fp_env;
+/* FPCR: rounding mode (RMode), flush-to-zero (FZ, FZ16, and FIZ and AH with
+   FEAT_AFP) and the exception trap enables (IDE, IXE, UFE, OFE, DZE, IOE). */
+#define FPCR_RMODE (UINT64_C (3) << 22)
+#define FPCR_FZ (UINT64_C (1) << 24)
+#define FPCR_FZ16 (UINT64_C (1) << 19)
+#define FPCR_AFP (UINT64_C (3))
+#define FPCR_TRAPS UINT64_C (0x9f00)
+#else
+typedef struct
+{
+  int unused;
+} host_fp_env;
+#endif
+
+static inline void
+enter_kernel_fp_mode (unsigned ftz, host_fp_env *caller)
+{
+#if defined(HOST_KERNEL_FP_X86)
+  caller->mxcsr = _mm_getcsr ();
+  unsigned kernel
+    = (caller->mxcsr
+       & ~(_MM_FLUSH_ZERO_MASK | _MM_DENORMALS_ZERO_MASK | _MM_ROUND_MASK))
+      | _MM_MASK_MASK | _MM_ROUND_NEAREST
+      | (ftz ? (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON) : 0);
+  if (kernel != caller->mxcsr)
+    _mm_setcsr (kernel);
+#elif defined(HOST_KERNEL_FP_AARCH64)
+  __asm__ volatile ("mrs %0, fpcr" : "=r"(caller->fpcr));
+  __asm__ volatile ("mrs %0, fpsr" : "=r"(caller->fpsr));
+  uint64_t kernel
+    = (caller->fpcr
+       & ~(FPCR_RMODE | FPCR_FZ | FPCR_FZ16 | FPCR_AFP | FPCR_TRAPS))
+      | (ftz ? (FPCR_FZ | FPCR_FZ16) : 0);
+  if (kernel != caller->fpcr)
+    __asm__ volatile ("msr fpcr, %0" : : "r"(kernel));
+#else
+  (void)ftz;
+  (void)caller;
+#endif
+}
+
+/* Restores the caller's environment, including its exception flags. */
+static inline void
+leave_kernel_fp_mode (const host_fp_env *caller)
+{
+#if defined(HOST_KERNEL_FP_X86)
+  if (_mm_getcsr () != caller->mxcsr)
+    _mm_setcsr (caller->mxcsr);
+#elif defined(HOST_KERNEL_FP_AARCH64)
+  uint64_t fpcr, fpsr;
+  __asm__ volatile ("mrs %0, fpcr" : "=r"(fpcr));
+  __asm__ volatile ("mrs %0, fpsr" : "=r"(fpsr));
+  if (fpcr != caller->fpcr)
+    __asm__ volatile ("msr fpcr, %0" : : "r"(caller->fpcr));
+  if (fpsr != caller->fpsr)
+    __asm__ volatile ("msr fpsr, %0" : : "r"(caller->fpsr));
+#else
+  (void)caller;
+#endif
+}
+
+cl_int
+pocl_cpu_create_host_kernel (cl_device_id device,
+                             cl_kernel kernel,
+                             cl_host_kernel_pocl hk)
+{
+  cl_program program = kernel->program;
+  cl_uint dev_i = hk->program_device_i;
+
+  if (device->device_alloca_locals)
+    return CL_INVALID_OPERATION;
+
+  int err = pocl_driver_build_gvar_init_kernel (program, dev_i, device,
+                                                pocl_cpu_gvar_init_callback);
+  if (err != CL_SUCCESS)
+    return err == CL_OUT_OF_HOST_MEMORY ? err : CL_INVALID_PROGRAM_EXECUTABLE;
+
+  /* The work-group function specialized on the local size only: generic in
+     the grid size and global offset, so that it can run any range of any
+     grid. The grid here is wider than any launch so that this cache entry is
+     never a small-grid function, and serves all host kernels with this local
+     size. */
+  _cl_command_node cmd;
+  memset (&cmd, 0, sizeof (cmd));
+  cmd.type = CL_COMMAND_NDRANGE_KERNEL;
+  cmd.device = device;
+  cmd.program_device_i = dev_i;
+  _cl_command_run *run = &cmd.command.run;
+  run->kernel = kernel;
+  run->hash = kernel->meta->build_hash[dev_i];
+  run->force_large_grid_wg_func = 1;
+  run->pc.work_dim = hk->work_dim;
+  for (unsigned d = 0; d < 3; ++d)
+    {
+      run->pc.local_size[d] = hk->local_size[d];
+      run->pc.num_groups[d] = 1;
+      run->pc.global_offset[d] = 1;
+    }
+  run->pc.num_groups[0] = (SIZE_MAX / 4) / hk->local_size[0];
+
+  void *ci = pocl_check_kernel_dlhandle_cache (&cmd, CL_TRUE, CL_TRUE);
+  if (ci == NULL)
+    return CL_INVALID_PROGRAM_EXECUTABLE;
+  hk->device_data = ci;
+  hk->wg = run->wg;
+
+  memset (&hk->pc, 0, sizeof (hk->pc));
+  hk->pc.work_dim = hk->work_dim;
+  memcpy (hk->pc.local_size, hk->local_size, sizeof (hk->pc.local_size));
+  hk->pc.printf_buffer_capacity = hk->printf_buffer_size;
+  hk->pc.global_var_buffer = program->gvar_storage[dev_i];
+
+  cl_device_fp_config supports_any_denorms
+    = (device->half_fp_config | device->single_fp_config
+       | device->double_fp_config)
+      & CL_FP_DENORM;
+  hk->fp_mode = supports_any_denorms ? program->flush_denorms : 1;
+  return CL_SUCCESS;
+}
+
+void
+pocl_cpu_free_host_kernel (cl_device_id device, cl_host_kernel_pocl hk)
+{
+  pocl_release_dlhandle_cache (hk->device_data);
+  hk->device_data = NULL;
+}
+
+cl_int
+pocl_cpu_run_host_kernel (cl_host_kernel_pocl hk,
+                          const void *const *arg_values,
+                          const size_t *num_groups,
+                          const size_t *global_offset,
+                          size_t first_group,
+                          size_t group_count,
+                          void *scratch)
+{
+  const unsigned n = hk->num_args + hk->num_locals;
+  void **args = alloca (sizeof (void *) * (n + 1));
+  void **local_ptrs = alloca (sizeof (void *) * (n + 1));
+  char *s = (char *)scratch;
+
+  for (unsigned i = 0; i < n; ++i)
+    {
+      size_t offset = hk->local_offsets[i];
+      if (offset == SIZE_MAX)
+        {
+          void *value = (void *)arg_values[i];
+          size_t mask = hk->arg_alignment_masks[i];
+          /* clSetKernelArg copies values into aligned storage; do the same
+             for those that need it. */
+          if (((uintptr_t)value & mask) != 0)
+            {
+              size_t size = hk->kernel->meta->arg_info[i].type_size;
+              char *copy = alloca (size + mask);
+              copy = (char *)(((uintptr_t)copy + mask) & ~(uintptr_t)mask);
+              memcpy (copy, value, size);
+              value = copy;
+            }
+          args[i] = value;
+        }
+      else
+        {
+          local_ptrs[i] = s + offset;
+          args[i] = &local_ptrs[i];
+        }
+    }
+  args[n] = NULL;
+
+  struct pocl_context pc = hk->pc;
+  for (unsigned d = 0; d < 3; ++d)
+    {
+      pc.num_groups[d] = d < hk->work_dim ? num_groups[d] : 1;
+      pc.global_offset[d]
+        = global_offset != NULL && d < hk->work_dim ? global_offset[d] : 0;
+    }
+  uint32_t position = 0;
+  pc.printf_buffer = (uchar *)(s + hk->local_mem_size);
+  pc.printf_buffer_position = &position;
+
+  host_fp_env caller_fp_env;
+  enter_kernel_fp_mode (hk->fp_mode, &caller_fp_env);
+
+  pocl_workgroup_func wg = (pocl_workgroup_func)hk->wg;
+  size_t x = first_group % pc.num_groups[0];
+  size_t yz = first_group / pc.num_groups[0];
+  size_t y = yz % pc.num_groups[1];
+  size_t z = yz / pc.num_groups[1];
+  for (size_t i = 0; i < group_count; ++i)
+    {
+      wg ((uint8_t *)args, (uint8_t *)&pc, x, y, z);
+#ifndef ENABLE_PRINTF_IMMEDIATE_FLUSH
+      if (position > 0)
+        {
+          pocl_write_printf_buffer ((char *)pc.printf_buffer, position);
+          position = 0;
+        }
+#endif
+      if (++x == pc.num_groups[0])
+        {
+          x = 0;
+          if (++y == pc.num_groups[1])
+            {
+              y = 0;
+              ++z;
+            }
+        }
+    }
+
+  leave_kernel_fp_mode (&caller_fp_env);
+
+  return pc.execution_failed ? CL_OUT_OF_RESOURCES : CL_SUCCESS;
 }
 
 #ifdef HAVE_LIBXSMM

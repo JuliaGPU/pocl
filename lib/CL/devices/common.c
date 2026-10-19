@@ -2167,6 +2167,7 @@ static const cl_name_version OPENCL_EXTENSIONS[]
       { CL_MAKE_VERSION (0, 9, 0), "cl_pocl_command_buffer_svm" },
       { CL_MAKE_VERSION (0, 9, 0), "cl_pocl_command_buffer_host_buffer" },
       { CL_MAKE_VERSION (0, 9, 0), "cl_pocl_command_buffer_host_exec" },
+      { CL_MAKE_VERSION (0, 1, 0), "cl_pocl_host_kernel" },
       { CL_MAKE_VERSION (0, 1, 0), "cl_exp_tensor" },
       { CL_MAKE_VERSION (0, 1, 0), "cl_exp_defined_builtin_kernels" } };
 

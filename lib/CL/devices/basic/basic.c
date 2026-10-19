@@ -110,6 +110,9 @@ pocl_basic_init_device_ops(struct pocl_device_ops *ops)
 
   ops->run = pocl_basic_run;
   ops->run_native = pocl_basic_run_native;
+  ops->create_host_kernel = pocl_cpu_create_host_kernel;
+  ops->free_host_kernel = pocl_cpu_free_host_kernel;
+  ops->run_host_kernel = pocl_cpu_run_host_kernel;
 
   ops->build_source = pocl_driver_build_source;
   ops->link_program = pocl_driver_link_program;

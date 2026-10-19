@@ -27,6 +27,23 @@ e.g. when the data is compressed and its exact
 length is not known ahead of time.
 
 
+cl_pocl_host_kernel
+~~~~~~~~~~~~~~~~~~~
+
+A draft extension for CPU devices whose kernels run in the host process
+(``cpu``, ``cpu-minimal``, ``cpu-tbb``). It lets an application run the
+work-groups of a kernel on its own threads, synchronously and without command
+queues, events or locks, so that very small launches cost little more than a
+function call and the application's own scheduler (e.g. a language runtime's
+thread pool) decides where work-groups run.
+
+``clCreateHostKernelPOCL`` prepares a kernel for one device and local size,
+and ``clRunHostKernelPOCL`` runs a range of the work-groups of a grid on the
+calling thread, given the argument values and a scratch area for ``__local``
+memory and printf. Work-groups may run in any order and concurrently, so they
+must not wait on each other. See ``include/CL/cl_ext_pocl.h`` for the full
+description.
+
 cl_khr_command_buffer
 ~~~~~~~~~~~~~~~~~~~~~~~
 

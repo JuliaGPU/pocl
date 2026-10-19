@@ -142,6 +142,23 @@ void pocl_cpu_restore_rm_and_ftz (unsigned rm, unsigned ftz);
 POCL_EXPORT
 void pocl_cpu_setup_rm_and_ftz (cl_device_id dev, cl_program prog);
 
+POCL_EXPORT
+cl_int pocl_cpu_create_host_kernel (cl_device_id device,
+                                    cl_kernel kernel,
+                                    cl_host_kernel_pocl hk);
+
+POCL_EXPORT
+void pocl_cpu_free_host_kernel (cl_device_id device, cl_host_kernel_pocl hk);
+
+POCL_EXPORT
+cl_int pocl_cpu_run_host_kernel (cl_host_kernel_pocl hk,
+                                 const void *const *arg_values,
+                                 const size_t *num_groups,
+                                 const size_t *global_offset,
+                                 size_t first_group,
+                                 size_t group_count,
+                                 void *scratch);
+
 #ifdef __cplusplus
 }
 #endif

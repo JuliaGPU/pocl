@@ -223,6 +223,13 @@ POdeclsym (clGetMutableCommandInfoKHR)
 POdeclsym(clEnqueueSVMMemFillRectPOCL)
 POdeclsym(clEnqueueSVMMemcpyRectPOCL)
 
+/* cl_pocl_host_kernel */
+POdeclsym (clCreateHostKernelPOCL)
+POdeclsym (clGetHostKernelInfoPOCL)
+POdeclsym (clRetainHostKernelPOCL)
+POdeclsym (clReleaseHostKernelPOCL)
+POdeclsym (clRunHostKernelPOCL)
+
 /* cl_ext_buffer_device_address */
 POdeclsym (clSetKernelArgDevicePointerEXT)
 
