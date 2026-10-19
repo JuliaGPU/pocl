@@ -130,7 +130,7 @@ POname(clGetKernelWorkGroupInfo)
     case CL_KERNEL_PRIVATE_MEM_SIZE:
       {
         if (kernel->meta->private_mem_size)
-          POCL_RETURN_GETINFO (size_t, kernel->meta->private_mem_size[dev_i]);
+          POCL_RETURN_GETINFO (cl_ulong, kernel->meta->private_mem_size[dev_i]);
         else
           POCL_RETURN_GETINFO (cl_ulong, 0);
       }

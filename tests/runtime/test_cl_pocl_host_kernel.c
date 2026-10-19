@@ -81,6 +81,13 @@ static const char *source
     "    out[(z * get_num_groups (1) + y) * get_num_groups (0) + x] = 1;\n"
     "}\n"
     "\n"
+    "kernel void big_private (global int *out, int x) {\n"
+    "  volatile int a[256];\n"
+    "  for (int i = 0; i < 256; ++i)\n"
+    "    a[i] = i * x;\n"
+    "  out[0] = a[x & 255];\n"
+    "}\n"
+    "\n"
     "#ifndef NO_IMAGES\n"
     "kernel void image (read_only image2d_t img) {}\n"
     "#endif\n";
@@ -475,6 +482,17 @@ main (void)
   const size_t offset[2] = { 3, 70000 };
   if (test_ids (ids, device, offset))
     return EXIT_FAILURE;
+
+  /* The stack estimate, which decides whether a work-group fits on the
+     calling thread's stack, is reported per work-item. */
+  cl_kernel big_private = clCreateKernel (program, "big_private", &err);
+  CHECK_CL_ERROR (err);
+  cl_ulong private_mem = 0;
+  CHECK_CL_ERROR (clGetKernelWorkGroupInfo (
+      big_private, device, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof (private_mem),
+      &private_mem, NULL));
+  TEST_ASSERT (private_mem >= 256 * sizeof (cl_int));
+  CHECK_CL_ERROR (clReleaseKernel (big_private));
 
   /* Invalid uses. */
   size_t bad_local[4] = { 1, 1, 1, 1 };

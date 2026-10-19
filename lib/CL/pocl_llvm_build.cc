@@ -231,7 +231,10 @@ static bool generateProgramBC(PoclLLVMContextData *Context, llvm::Module *Mod,
            /*ErrorOnUnresolved=*/true))
     return true;
 
-  if (Device->work_group_stack_size > 0) {
+  // The estimate limits the work-group size on devices with a known stack
+  // size, and is reported as CL_KERNEL_PRIVATE_MEM_SIZE on CPUs.
+  if (Device->work_group_stack_size > 0
+      || (Device->type & CL_DEVICE_TYPE_CPU)) {
     bool Optimized = (Opts.find("-cl-opt-disable") == std::string::npos);
     estimateKernelStackSizes(Mod, Optimized);
   }
