@@ -1046,7 +1046,8 @@ file(RELATIVE_PATH POCL_INSTALL_FROM_LIB_TO_PRIVATE_LIBDIR
 ######################################################################################
 
 set(HAVE_LIBSVML 0)
-if(X86)
+# oneAPI only ships SVML for x86-64; linking it into 32-bit kernels crashes them
+if(X86_64)
   set(ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
   # use static libraries, so that the poclbinary is independent of system
   set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
@@ -1323,12 +1324,14 @@ endif()
 find_package(Python3 3.8 COMPONENTS Interpreter)
 
 # Determine whether we can use SPIRV on the host CPU device
-# - we don't have a useful SPIRV wrapper for 32bit SPIRV
+# - of the 32bit targets, the SPIRV wrapper generator only knows
+#   the ABI of i386 System V (not ARM32, RISC-V32 or 32bit Windows)
 # - on Windows/MSVC there's a mangling mismatch between
 #   Clang (compiling the kernellib with MSVC function names)
 #   and the SPIRV wrapper (only supporting Itanium mangling)
 set(HOST_CPU_ENABLE_SPIRV OFF)
-if(ENABLE_HOST_CPU_DEVICES AND ENABLE_SPIRV AND (NOT MSVC) AND (HOST_DEVICE_ADDRESS_BITS MATCHES "64"))
+if(ENABLE_HOST_CPU_DEVICES AND ENABLE_SPIRV AND (NOT MSVC) AND
+   ((HOST_DEVICE_ADDRESS_BITS MATCHES "64") OR (I386 AND NOT WIN32)))
   set(HOST_CPU_ENABLE_SPIRV ON)
 endif()
 

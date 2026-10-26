@@ -584,7 +584,12 @@ function(compile_sleef VARIANT SLEEF_CONFIG SLEEF_CONFIG_NEW SLEEF_BC)
   # the "runtime/clGetKernelArgInfo" requires working images with spir,
   # that only works if we're using the new (generated) wrappers
   set(HAVE_WORKING_IMAGES_WITH_SPIR OFF CACHE BOOL "image functions work with SPIR" FORCE)
-  if(HOST_DEVICE_ADDRESS_BITS EQUAL 32)
+  if(I386)
+    # the i386 ABI passes vectors the same way regardless of the vector
+    # registers, so the 128bit wrapper works for every variant, including
+    # those without SSE2 that never reach the generation in the loop below
+    generate_cpu_spir_wrapper(cpu_x86 ${VARIANT} 128 SPIR_WRAPPER_FILE)
+  elseif(HOST_DEVICE_ADDRESS_BITS EQUAL 32)
     set(SPIR_WRAPPER_FILE "host/spir_wrapper32.ll")
   else()
     if(RISCV)

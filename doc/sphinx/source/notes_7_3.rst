@@ -94,6 +94,15 @@ CPU driver
 * Fixed use of an uninitialised kernel-library fallback name when
   `LLC_HOST_CPU` is set.
 
+* SPIR-V is now supported on 32-bit x86 (i386 System V, e.g. i686 Linux),
+  using a generated SPIR builtin wrapper instead of the old scalar-only one.
+  Other 32-bit hosts still have SPIR-V disabled.
+
+* Struct types in SPIR-V modules keep the OpenCL C layout (8-byte aligned
+  `long` and `double`) on hosts whose ABI aligns these types less, such as
+  i386. Previously, field offsets, struct sizes and array strides silently
+  followed the host layout.
+
 ===================================
 Deprecation/feature removal notices
 ===================================

@@ -74,6 +74,10 @@ int main(int argc, char **argv) {
     printf("SKIP: The test requires support for SPIR-V 1.0\n");
     return 77;
   }
+  if (poclu_device_address_bits(device) != 64) {
+    printf("SKIP: The test's SPIR-V module is 64-bit\n");
+    return 77;
+  }
 
   // The reduced kernel's barrier lowers to a sub_group_barrier, so the program
   // only links on devices whose builtin library has the subgroup builtins.

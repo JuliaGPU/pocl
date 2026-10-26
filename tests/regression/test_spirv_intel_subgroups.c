@@ -81,6 +81,10 @@ int main(int argc, char **argv) {
     printf("SKIP: The test requires support for SPIR-V 1.1\n");
     return 77;
   }
+  if (poclu_device_address_bits(device) != 64) {
+    printf("SKIP: The test's SPIR-V module is 64-bit\n");
+    return 77;
+  }
   if (!poclu_supports_extension(device, "cl_intel_subgroups") ||
       !poclu_supports_extension(device, "cl_intel_required_subgroup_size")) {
     printf("SKIP: The test requires cl_intel_subgroups and "

@@ -95,6 +95,7 @@ using namespace llvm;
 POP_COMPILER_DIAGS
 
 #include "ProgramScopeVariables.h"
+#include "SPIRStructLayout.h"
 #include "linker.h"
 
 //#define DEBUG_POCL_LLVM_API
@@ -884,10 +885,12 @@ int pocl_llvm_build_program(cl_program program,
 }
 
 /* converts a "spir-unknown-unknown" module triple to target (CPU/CUDA etc)
- * triple, resets the datalayout to the target datalayout */
+ * triple, resets the datalayout to the target datalayout while keeping the
+ * memory layout of the SPIR struct types */
 static int pocl_convert_spir_bitcode_to_target(llvm::Module *p,
                                                llvm::Module *libmodule,
-                                               cl_device_id device) {
+                                               cl_device_id device,
+                                               std::string &Log) {
 
 #if LLVM_MAJOR < 21
   const std::string &ModTriple = p->getTargetTriple();
@@ -911,6 +914,9 @@ static int pocl_convert_spir_bitcode_to_target(llvm::Module *p,
                            "bits, device: %s / module: %s\n",
                            device->llvm_target_triplet, ModTriple.c_str());
     }
+
+    if (!pocl::preserveSPIRStructLayouts(*p, libmodule->getDataLayout(), Log))
+      return CL_LINK_PROGRAM_FAILURE;
 
     /* Note this is a hack to get SPIR working. We'll be linking the
      * host kernel library (plain LLVM IR) to the SPIR program.bc,
@@ -986,8 +992,11 @@ int pocl_llvm_link_program(cl_program program, unsigned device_i,
       }
     }
 
+    std::string ConvertLog;
     error = pocl_convert_spir_bitcode_to_target(TempModule.get(), LibraryModule,
-                                                device);
+                                                device, ConvertLog);
+    if (!ConvertLog.empty())
+      appendToProgramBuildLog(program, device_i, ConvertLog);
     POCL_RETURN_ERROR_ON((error != CL_SUCCESS), CL_LINK_PROGRAM_FAILURE,
                          "could not convert SPIR to Target\n");
 

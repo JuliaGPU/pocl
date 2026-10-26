@@ -814,3 +814,14 @@ poclu_device_supports_il (cl_device_id device, const char *il)
   free (ils);
   return has_il;
 }
+
+cl_uint
+poclu_device_address_bits (cl_device_id device)
+{
+  cl_uint address_bits = 0;
+  cl_int err = clGetDeviceInfo (device, CL_DEVICE_ADDRESS_BITS,
+                                sizeof (cl_uint), &address_bits, NULL);
+  if (err != CL_SUCCESS)
+    return 0;
+  return address_bits;
+}

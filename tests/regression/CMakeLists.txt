@@ -31,6 +31,8 @@ set(C_PROGRAMS_TO_BUILD test_assign_loop_variable_to_privvar_makes_it_local
      test_issue_1711 test_issue_1794 test_issue_1747 test_issue_1958
      test_unreachable_kernel
      test_spirv_float_controls2
+     test_spirv_builtins
+     test_spirv_struct_layout
      test_unreachable_in_infinite_loop
      test_rematerialized_alloca_load_with_outside_pr_users
      test_peeled_wi_global_id
@@ -194,6 +196,10 @@ add_test_pocl(NAME "regression/test_issue_1958" WORKITEM_HANDLER "loops;loopvec;
 add_test_pocl(NAME "regression/test_unreachable_kernel" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_unreachable_kernel" LABELS ${SPIRV_LABELS})
 
 add_test_pocl(NAME "regression/test_spirv_float_controls2" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_spirv_float_controls2" LABELS ${SPIRV_LABELS})
+
+add_test_pocl(NAME "regression/test_spirv_builtins" COMMAND "test_spirv_builtins" LABELS ${SPIRV_LABELS})
+
+add_test_pocl(NAME "regression/test_spirv_struct_layout" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_spirv_struct_layout" LABELS ${SPIRV_LABELS})
 
 add_test_pocl(NAME "regression/unreachable_in_infinite_loop" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_unreachable_in_infinite_loop")
 

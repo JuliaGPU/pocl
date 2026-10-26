@@ -86,7 +86,15 @@ int main(int, char **) {
   if (Err != CL_SUCCESS)
     return EXIT_FAILURE;
 
-  std::ifstream File(SRCDIR "/printf-kernels.spv", std::ios::binary | std::ios::ate);
+  cl_uint AddressBits;
+  Err = clGetDeviceInfo (Device, CL_DEVICE_ADDRESS_BITS, sizeof (AddressBits),
+                         &AddressBits, NULL);
+  if (Err != CL_SUCCESS)
+    return EXIT_FAILURE;
+
+  std::ifstream File(AddressBits == 32 ? SRCDIR "/printf-kernels32.spv"
+                                       : SRCDIR "/printf-kernels.spv",
+                     std::ios::binary | std::ios::ate);
   std::streamsize Binsize = File.tellg();
   File.seekg(0, std::ios::beg);
 

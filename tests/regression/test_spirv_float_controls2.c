@@ -116,6 +116,10 @@ int main(int argc, char **argv) {
     printf("SKIP: The test requires support for SPIR-V 1.0\n");
     return 77;
   }
+  if (poclu_device_address_bits(device) != 64) {
+    printf("SKIP: The test's SPIR-V module is 64-bit\n");
+    return 77;
+  }
 
   size_t extensions_size;
   CHECK_ERROR(clGetDeviceInfo(device, CL_DEVICE_SPIRV_EXTENSIONS_KHR, 0, NULL,

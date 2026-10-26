@@ -30,6 +30,9 @@
 // llvm-spirv printf-kernels.bc
 //
 // spirv-val printf-kernels.spv
+//
+// printf-kernels32.spv is built the same way, with -triple=spir-unknown-unknown
+// and llvm-spirv --spirv-max-version=1.0 -o printf-kernels32.spv.
 
 global char hello_g[] = "HELLO GLOBAL\n";
 global char strings_g[] = "STRiNGS\n";

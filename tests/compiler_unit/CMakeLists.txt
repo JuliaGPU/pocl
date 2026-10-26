@@ -42,7 +42,8 @@ function(add_llvm_check)
     set(WORKITEM_HANDLER "loopvec")
   endif()
   if (POCL_UTEST_SPIRV_NAME)
-    if (ENABLE_SPIRV)
+    # the .spirv inputs are 64-bit
+    if (ENABLE_SPIRV AND HOST_DEVICE_ADDRESS_BITS EQUAL 64)
       add_test_pocl(NAME "kernel_compiler_unit_tests/${POCL_UTEST_SPIRV_NAME}"
         COMMAND "poclcc" -s -o ${POCL_UTEST_SPIRV_NAME}.out
         "${CMAKE_CURRENT_SOURCE_DIR}/${POCL_UTEST_SPIRV_NAME}.spirv"

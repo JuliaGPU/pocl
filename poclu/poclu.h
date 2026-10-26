@@ -378,6 +378,13 @@ POCLU_API int POCLU_CALL poclu_device_supports_il (cl_device_id device,
                                                    const char *il);
 
 /**
+ * \brief get the address bits of a device, which must match the addressing
+ * model (Physical32 or Physical64) of the SPIR-V modules it runs
+ * \return the address bits, or 0 on error
+ */
+POCLU_API cl_uint POCLU_CALL poclu_device_address_bits (cl_device_id device);
+
+/**
  * \brief check a return value of CL function or print the error to stderr.
  * @param cl_err [in] value to be checked.
  * @param line  [in] line of function in question.

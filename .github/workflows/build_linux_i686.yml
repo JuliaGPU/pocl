@@ -1,0 +1,78 @@
+---
+name: Linux / CPU i686 on GH tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'release*'
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'CHANGES'
+      - 'COPYING'
+      - 'CREDITS'
+      - 'LICENSE'
+      - 'README.*'
+      - 'tools/docker/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Builds and tests 32-bit x86 PoCL in an i386 Debian container; setarch
+  # makes uname report i686, which CMake uses as the system processor.
+  # Debian testing because its LLVM is new enough for the CPU JIT on i386
+  # (JITLink supports R_386_GOT32X since LLVM 21).
+  i686_test:
+    name: LLVM ${{ matrix.llvm }} - i686
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        llvm: [21]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Build and test PoCL
+        timeout-minutes: 120
+        env:
+          LLVM_VERSION: ${{ matrix.llvm }}
+          # Fail on i686 independently of this job: printf of LONG_MIN,
+          # signal handlers (SIGFPE avoidance is x86-64 only), allocations
+          # beyond the 32-bit address space and image conversion rounding.
+          KNOWN_FAILURES: "kernel/test_printf_(loopvec|cbs)$|regression/test_issue_2005|regression/test_signal_handlers|runtime/test_image_normalized_conv"
+        run: |
+          cat > ${{ runner.temp }}/build.sh <<'EOF'
+          set -ex
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config python3 zlib1g-dev \
+            libhwloc-dev clang-$LLVM_VERSION llvm-$LLVM_VERSION-dev \
+            libclang-$LLVM_VERSION-dev libclang-cpp$LLVM_VERSION-dev \
+            libpolly-$LLVM_VERSION-dev libllvmspirvlib-$LLVM_VERSION-dev \
+            llvm-spirv-$LLVM_VERSION
+          # Debian's i386 baseline has no SSE, which the FTZ handling
+          # requires (#2097).
+          cmake -S /pocl -B /build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS=-msse2 -DCMAKE_CXX_FLAGS=-msse2 \
+            -DWITH_LLVM_CONFIG=/usr/bin/llvm-config-$LLVM_VERSION \
+            -DENABLE_ICD=OFF -DKERNELLIB_HOST_CPU_VARIANTS=distro
+          grep -q "define HOST_CPU_ENABLE_SPIRV" /build/config.h
+          ninja -C /build
+          cd /build
+          export POCL_CACHE_DIR=/tmp/pocl_cache
+          /pocl/tools/scripts/run_cpu_tests -j$(nproc) --output-on-failure \
+            -E "$KNOWN_FAILURES"
+          EOF
+          docker run --rm --platform linux/386 \
+            -v ${{ github.workspace }}:/pocl -v ${{ runner.temp }}:/scripts \
+            -e LLVM_VERSION -e KNOWN_FAILURES \
+            i386/debian:testing setarch i686 bash /scripts/build.sh

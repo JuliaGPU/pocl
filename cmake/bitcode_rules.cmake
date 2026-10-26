@@ -281,6 +281,9 @@ function(generate_cpu_spir_wrapper ARCH SUBDIR SIZE OUTPUT)
   if(ARCH STREQUAL "cpu_x86" AND LLC_TRIPLE MATCHES "-windows-gnu")
     list(APPEND EXTRA_OPT "--mingw")
   endif()
+  if(ARCH STREQUAL "cpu_x86")
+    list(APPEND EXTRA_OPT "--address-bits" "${HOST_DEVICE_ADDRESS_BITS}")
+  endif()
 
   add_custom_command( OUTPUT "${FNAME}"
       DEPENDS "${CMAKE_SOURCE_DIR}/lib/kernel/SPIR/generate_spir_wrapper.py"
