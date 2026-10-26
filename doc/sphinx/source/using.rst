@@ -368,6 +368,17 @@ pocl.
  where the value is recompute in the using parallel region instead of storing
  it to the work-item context. Enabled by default.
 
+- **POCL_PTHREAD_SCHEDULE**
+
+ How the 'cpu' driver distributes the work-groups of a kernel over its
+ threads (not in builds using OpenMP). ``static`` (the default) gives each
+ thread a contiguous block of work-groups, and threads that run out of work
+ take work-groups from the others. Launches with the same number of
+ work-groups thus mostly run the same work-groups on the same threads, so
+ that, with ``POCL_AFFINITY``, memory that a kernel touched first stays
+ local to the threads that work on it later. ``guided`` deals out
+ work-groups in decreasing chunks to whichever thread asks first.
+
 - **POCL_REMOTE_XXX**
 
  These variables are used to configure different aspects of the remote driver

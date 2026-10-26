@@ -67,7 +67,17 @@ struct kernel_run_command
   /* this is required b/c there's an additional level of indirection */
   void **arguments2;
 
-  size_t remaining_wgs;
+  /* pthread: the work-groups that haven't been claimed, in one contiguous
+   * block per thread of the device, or NULL for the guided schedule */
+  struct pocl_wg_block *wg_blocks;
+  unsigned num_wg_blocks;
+  /* the thread that owns wg_blocks[0] */
+  unsigned first_wg_thread;
+
+  /* the work-groups that haven't been claimed by a thread; read without
+   * the lock, and written by every thread claiming work-groups, so kept
+   * apart from the fields they only read. 64-bit for the Windows atomics. */
+  POCL_ALIGNAS (HOST_CPU_CACHELINE_SIZE) uint64_t remaining_wgs;
   size_t wgs_dealt;
 };
 
