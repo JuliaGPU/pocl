@@ -278,7 +278,7 @@ function(generate_cpu_spir_wrapper ARCH SUBDIR SIZE OUTPUT)
   endif()
 
   # clang passes vectors directly on x86-64 MinGW, unlike System V (and MSVC)
-  if(ARCH STREQUAL "cpu_x86" AND LLC_TRIPLE MATCHES "-windows-gnu")
+  if(ARCH STREQUAL "cpu_x86" AND LLC_TRIPLE MATCHES "-windows-gnu|-mingw32")
     list(APPEND EXTRA_OPT "--mingw")
   endif()
 
