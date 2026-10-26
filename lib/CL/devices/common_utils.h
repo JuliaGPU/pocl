@@ -67,7 +67,10 @@ struct kernel_run_command
   /* this is required b/c there's an additional level of indirection */
   void **arguments2;
 
-  size_t remaining_wgs;
+  /* the work-groups that haven't been claimed by a thread; read without
+   * the lock, and written by every thread claiming work-groups, so kept
+   * apart from the fields they only read. 64-bit for the Windows atomics. */
+  POCL_ALIGNAS (HOST_CPU_CACHELINE_SIZE) uint64_t remaining_wgs;
   size_t wgs_dealt;
 };
 

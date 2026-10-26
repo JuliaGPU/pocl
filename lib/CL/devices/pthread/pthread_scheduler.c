@@ -293,10 +293,10 @@ get_wg_index_range (kernel_run_command *k, unsigned *start_index,
 
   *start_index = k->wgs_dealt;
   *end_index = k->wgs_dealt + max_wgs-1;
-  k->remaining_wgs -= max_wgs;
-  k->wgs_dealt += max_wgs;
-  if (k->remaining_wgs == 0)
+  /* atomically, for check_kernel_queue_for_device */
+  if (POCL_ATOMIC_ADD (k->remaining_wgs, (uint64_t)0 - max_wgs) == 0)
     *last_wgs = 1;
+  k->wgs_dealt += max_wgs;
   POCL_UNLOCK (k->lock);
 
   return 1;
@@ -640,7 +640,12 @@ check_kernel_queue_for_device (thread_data *td)
   DL_FOREACH (scheduler.kernel_queue, cmd)
   {
     cl_device_id subd = cmd->device;
-    if (shall_we_run_this (td, subd))
+    /* Once all work-groups of a kernel have been claimed, the thread that
+       claimed the last ones unlinks it, for which it needs wq_lock_fast.
+       Threads that keep joining it until then only find nothing to do, and
+       hold up that thread. */
+    if (shall_we_run_this (td, subd)
+        && POCL_ATOMIC_LOAD (cmd->remaining_wgs) > 0)
       return cmd;
   }
 
