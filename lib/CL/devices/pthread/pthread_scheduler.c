@@ -40,6 +40,14 @@
 #include "pocl_util.h"
 #include "utlist.h"
 
+/* PTHREAD_CHECK: the C threads layer */
+#if defined(__linux__) && !defined(__ANDROID__) && defined(PTHREAD_CHECK)
+#define POCL_PTHREAD_AFFINITY
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #ifdef ENABLE_HOST_CPU_DEVICES_OPENMP
 #include <omp.h>
 #endif
@@ -69,6 +77,10 @@ struct pool_thread_data
    * used for deciding whether a particular thread should run
    * commands scheduled on a subdevice. */
   unsigned index;
+  /* the CPU this thread is pinned to with POCL_AFFINITY, or -1 */
+  int cpu;
+  /* the NUMA node of that CPU, or -1 */
+  int numa_node;
   /* printf buffer*/
   void *printf_buffer;
   size_t thread_stack_size;
@@ -106,6 +118,134 @@ typedef struct scheduler_data_
 } scheduler_data;
 
 static scheduler_data scheduler;
+
+#ifdef POCL_PTHREAD_AFFINITY
+/* Reads the integer in the sysfs file FMT for CPU, or returns -1. */
+static int
+read_cpu_attribute (const char *fmt, int cpu)
+{
+  char path[128];
+  snprintf (path, sizeof (path), fmt, cpu);
+  FILE *f = fopen (path, "r");
+  if (f == NULL)
+    return -1;
+  int value = -1;
+  if (fscanf (f, "%d", &value) != 1)
+    value = -1;
+  fclose (f);
+  return value;
+}
+
+static int
+cpu_numa_node (int cpu)
+{
+  char path[64];
+  snprintf (path, sizeof (path), "/sys/devices/system/cpu/cpu%d", cpu);
+  DIR *dir = opendir (path);
+  if (dir == NULL)
+    return -1;
+  int node = -1;
+  struct dirent *entry;
+  while (node < 0 && (entry = readdir (dir)) != NULL)
+    if (strncmp (entry->d_name, "node", 4) == 0)
+      node = atoi (entry->d_name + 4);
+  closedir (dir);
+  return node;
+}
+
+struct cpu_place
+{
+  int cpu, node, package, core;
+  /* the how-manieth CPU of its core, and of its node among those */
+  int smt, rank;
+};
+
+static int
+compare_places (const void *a, const void *b)
+{
+  const struct cpu_place *x = a, *y = b;
+  if (x->smt != y->smt)
+    return x->smt - y->smt;
+  if (x->rank != y->rank)
+    return x->rank - y->rank;
+  if (x->node != y->node)
+    return x->node - y->node;
+  return x->cpu - y->cpu;
+}
+
+/* Chooses the CPUs that the threads are pinned to with POCL_AFFINITY:
+   those that the threads of the process may run on, i.e., the union of
+   their affinity masks, which respects taskset and cpusets as well as
+   applications that pin their threads before using PoCL. The CPUs are
+   ordered so that the first threads get a CPU of their own core, spread
+   evenly over the NUMA nodes. A subdevice of the first N threads thus has
+   the memory bandwidth of all nodes. */
+static void
+place_threads (void)
+{
+  cpu_set_t allowed, set;
+  CPU_ZERO (&allowed);
+  DIR *tasks = opendir ("/proc/self/task");
+  if (tasks != NULL)
+    {
+      struct dirent *entry;
+      while ((entry = readdir (tasks)) != NULL)
+        {
+          /* threads can exit while we're looking */
+          pid_t tid = atoi (entry->d_name);
+          if (tid > 0 && sched_getaffinity (tid, sizeof (set), &set) == 0)
+            CPU_OR (&allowed, &allowed, &set);
+        }
+      closedir (tasks);
+    }
+  if (CPU_COUNT (&allowed) == 0
+      && sched_getaffinity (0, sizeof (allowed), &allowed) != 0)
+    {
+      /* e.g. with more than CPU_SETSIZE CPUs */
+      POCL_MSG_WARN ("POCL_AFFINITY: can't query the CPUs to run on, "
+                     "not pinning threads\n");
+      return;
+    }
+
+  int num = CPU_COUNT (&allowed);
+  struct cpu_place *places = calloc (num, sizeof (struct cpu_place));
+  if (places == NULL)
+    return;
+  int n = 0;
+  for (int cpu = 0; cpu < CPU_SETSIZE && n < num; ++cpu)
+    {
+      if (!CPU_ISSET (cpu, &allowed))
+        continue;
+      struct cpu_place *p = &places[n++];
+      p->cpu = cpu;
+      p->node = cpu_numa_node (cpu);
+      p->package = read_cpu_attribute (
+          "/sys/devices/system/cpu/cpu%d/topology/physical_package_id", cpu);
+      p->core = read_cpu_attribute (
+          "/sys/devices/system/cpu/cpu%d/topology/core_id", cpu);
+      /* CPUs come in increasing order, so the earlier ones of the same
+         core, and the earlier first CPUs of the same node, are known */
+      p->smt = 0;
+      p->rank = 0;
+      for (int i = 0; i < n - 1; ++i)
+        if (p->core >= 0 && places[i].core == p->core
+            && places[i].package == p->package)
+          ++p->smt;
+      for (int i = 0; i < n - 1; ++i)
+        if (places[i].node == p->node && places[i].smt == p->smt)
+          ++p->rank;
+    }
+  qsort (places, n, sizeof (struct cpu_place), compare_places);
+
+  for (unsigned i = 0; i < scheduler.num_threads; ++i)
+    {
+      struct cpu_place *p = &places[i % n];
+      scheduler.thread_pool[i].cpu = p->cpu;
+      scheduler.thread_pool[i].numa_node = p->node;
+    }
+  free (places);
+}
+#endif
 
 cl_int
 pthread_scheduler_init (cl_device_id device)
@@ -153,6 +293,16 @@ pthread_scheduler_init (cl_device_id device)
   POCL_INIT_BARRIER (scheduler.init_barrier, num_worker_threads + 1);
 
   scheduler.worker_out_of_memory = 0;
+
+  for (i = 0; i < num_worker_threads; ++i)
+    {
+      scheduler.thread_pool[i].cpu = -1;
+      scheduler.thread_pool[i].numa_node = -1;
+    }
+#ifdef POCL_PTHREAD_AFFINITY
+  if (pocl_get_bool_option ("POCL_AFFINITY", 0))
+    place_threads ();
+#endif
 
   for (i = 0; i < num_worker_threads; ++i)
     {
@@ -436,12 +586,21 @@ claim_wgs (kernel_run_command *k, struct pool_thread_data *td,
 
   if (n == 0)
     {
-      /* steal, starting with the next thread's block */
+      /* steal, starting with the next thread's block, and from threads on
+         the same NUMA node first, whose memory is as close */
       uint64_t stolen = 0;
-      for (unsigned d = 1;
-           stolen == 0 && d < num && POCL_ATOMIC_LOAD (k->remaining_wgs) > 0;
-           ++d)
-        stolen = steal_wgs (&k->wg_blocks[(own + d) % num]);
+      const int node = td->numa_node;
+      for (int remote = 0; remote <= (node >= 0); ++remote)
+        for (unsigned d = 1; stolen == 0 && d < num
+                             && POCL_ATOMIC_LOAD (k->remaining_wgs) > 0;
+             ++d)
+          {
+            unsigned victim = (own + d) % num;
+            int victim_node
+                = scheduler.thread_pool[k->first_wg_thread + victim].numa_node;
+            if (node < 0 || (victim_node == node) != remote)
+              stolen = steal_wgs (&k->wg_blocks[victim]);
+          }
       if (stolen == 0)
         return 0;
       /* Run half of it, and make the rest this thread's block. Claiming
@@ -951,14 +1110,15 @@ pocl_pthread_driver_thread (void *p)
   assert (scheduler.local_mem_size > 0);
   td->local_mem = pocl_aligned_malloc (MAX_EXTENDED_ALIGNMENT,
                                        scheduler.local_mem_size);
-#if defined(__linux__) && !defined(__ANDROID__) && defined(PTHREAD_CHECK)
-  if (pocl_get_bool_option ("POCL_AFFINITY", 0))
+#ifdef POCL_PTHREAD_AFFINITY
+  if (td->cpu >= 0)
     {
       cpu_set_t set;
       CPU_ZERO (&set);
-      CPU_SET (td->index, &set);
+      CPU_SET (td->cpu, &set);
+      /* td->thread may not have been set yet */
       PTHREAD_CHECK (
-          pthread_setaffinity_np (td->thread, sizeof (cpu_set_t), &set));
+          pthread_setaffinity_np (pthread_self (), sizeof (cpu_set_t), &set));
     }
 #endif
 

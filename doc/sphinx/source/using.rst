@@ -77,9 +77,11 @@ pocl.
 - **POCL_AFFINITY**
 
   Linux-only, specific to 'cpu' driver. If set to 1, each thread of
-  the driver sets its affinity to its index. This may be useful
-  with very long running kernels, or when using subdevices.
-  Defaults to 0 (most people don't need this).
+  the driver is pinned to one of the CPUs that the process's threads may
+  run on, respecting e.g. ``taskset``. The first threads get a core of
+  their own, round-robin over the NUMA nodes, so that a subdevice of fewer
+  threads is spread over the nodes. See also ``POCL_PTHREAD_SCHEDULE``.
+  Defaults to 0.
 
 - **POCL_BINARY_SPECIALIZE_WG**
 
