@@ -128,7 +128,7 @@ POname(clGetKernelWorkGroupInfo)
     }
     case CL_KERNEL_PRIVATE_MEM_SIZE:
       {
-        POCL_RETURN_GETINFO (size_t, device_meta->private_mem_size);
+        POCL_RETURN_GETINFO (cl_ulong, device_meta->private_mem_size);
       }
     case CL_KERNEL_SPILL_MEM_SIZE_INTEL:
       {

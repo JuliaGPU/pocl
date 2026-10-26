@@ -740,13 +740,17 @@ int pocl_llvm_get_kernels_metadata(cl_program program, unsigned device_i) {
      * has some problem that hinders optimization, allocas might
      * not be optimized away at all. In that case, the estimated
      * stack size might be the actual stack size.
-     * Set the kernel limit on workgroup size accordingly. */
-    if (Device->work_group_stack_size > 0) {
-      unsigned long EstStackSize = 0;
-      std::string MetadataKey(meta->name);
-      MetadataKey.append(".meta.est.stack.size");
-      if (getModuleIntMetadata(*input, MetadataKey.c_str(), EstStackSize) &&
-          EstStackSize > 0) {
+     * Set the kernel limit on workgroup size accordingly. On CPUs, where
+     * the work-item data lives on the stack, also report the estimate as
+     * CL_KERNEL_PRIVATE_MEM_SIZE (per work-item). */
+    unsigned long EstStackSize = 0;
+    std::string MetadataKey(meta->name);
+    MetadataKey.append(".meta.est.stack.size");
+    if (getModuleIntMetadata(*input, MetadataKey.c_str(), EstStackSize) &&
+        EstStackSize > 0) {
+      if (Device->type & CL_DEVICE_TYPE_CPU)
+        device_meta->private_mem_size = EstStackSize;
+      if (Device->work_group_stack_size > 0) {
         size_t WorkItemsStackLimit =
             Device->work_group_stack_size / EstStackSize;
         // The estimate is the worst-case only; keep the minimum of 1 work item

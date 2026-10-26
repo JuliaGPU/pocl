@@ -56,6 +56,10 @@ if(HAVE_ONNXRT)
   list(APPEND C_PROGRAMS_TO_BUILD test_dbk_onnx_inference)
 endif()
 
+if(UNIX)
+  list(APPEND C_PROGRAMS_TO_BUILD test_cl_pocl_host_kernel)
+endif()
+
 set(CXX_PROGRAMS_TO_BUILD test_device_address test_svm test_large_buf
   test_subbuffers test_compile_n_link test_dbk_matmul test_tensor_view
   test_dbk_convert test_dbk_set_rows)
@@ -69,6 +73,10 @@ foreach(PROG ${C_PROGRAMS_TO_BUILD})
   target_link_libraries("${PROG}"  image_test_utils ${POCLU_LINK_OPTIONS})
   add_symlink_to_built_opencl_dynlib("${PROG}")
 endforeach()
+
+if(UNIX)
+  target_link_libraries(test_cl_pocl_host_kernel ${PTHREAD_LIBRARY})
+endif()
 
 foreach(PROG ${CXX_PROGRAMS_TO_BUILD})
   set_source_files_properties( "${PROG}.cpp" PROPERTIES LANGUAGE CXX )
@@ -160,6 +168,13 @@ add_test(NAME "runtime/test_buffer_ping_pong" COMMAND "test_buffer_ping_pong")
 add_test_pocl(NAME "runtime/clSetMemObjectDestructorCallback" COMMAND  "test_clSetMemObjectDestructorCallback" WORKITEM_HANDLER "loopvec")
 
 add_test(NAME "runtime/test_cl_pocl_content_size" COMMAND "test_cl_pocl_content_size")
+
+if(UNIX)
+  add_test_pocl(NAME "runtime/test_cl_pocl_host_kernel"
+                WORKITEM_HANDLER "loopvec;cbs"
+                COMMAND "test_cl_pocl_host_kernel")
+  add_cpu_jit_test("cl_pocl_host_kernel" test_cl_pocl_host_kernel)
+endif()
 
 add_test_pocl(NAME "runtime/test_deviceside_enqueue" COMMAND "test_deviceside_enqueue" WORKITEM_HANDLER "loopvec")
 

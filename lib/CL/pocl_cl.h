@@ -907,6 +907,23 @@ struct pocl_device_ops {
   /* For clEnqueueNativeKernel. May be NULL. */
   void (*run_native) (void *data, _cl_command_node *cmd);
 
+  /* cl_pocl_host_kernel, for devices whose kernels run in the host process.
+     May be NULL. create_host_kernel sets up the device-specific fields of HK
+     (the work-group function and the context template) after the generic
+     ones, free_host_kernel releases them, and run_host_kernel implements
+     clRunHostKernelPOCL on validated arguments. */
+  cl_int (*create_host_kernel) (cl_device_id device,
+                                cl_kernel kernel,
+                                cl_host_kernel_pocl hk);
+  void (*free_host_kernel) (cl_device_id device, cl_host_kernel_pocl hk);
+  cl_int (*run_host_kernel) (cl_host_kernel_pocl hk,
+                             const void *const *arg_values,
+                             const size_t *num_groups,
+                             const size_t *global_offset,
+                             size_t first_group,
+                             size_t group_count,
+                             void *scratch);
+
   /** Perform initialization steps and can return additional
    * build options that are required for the device.
    *
@@ -2113,6 +2130,39 @@ struct _cl_kernel {
 
   /* for program's linked list of kernels */
   struct _cl_kernel *next;
+};
+
+/* cl_pocl_host_kernel. Immutable after creation. */
+struct _cl_host_kernel_pocl
+{
+  POCL_OBJECT;
+  /* The root device, which the program is built for. */
+  cl_device_id device;
+  /* Retained, so that the program can't be rebuilt. */
+  cl_kernel kernel;
+  cl_program program;
+  cl_uint program_device_i;
+  cl_uint work_dim;
+  size_t local_size[3];
+  cl_uint num_args;
+  cl_uint num_locals;
+  /* For the explicit arguments followed by the automatic locals: the offset
+     of the __local buffer in the scratch area, or SIZE_MAX for arguments
+     that aren't __local. */
+  size_t *local_offsets;
+  /* For the explicit arguments followed by the automatic locals: the
+     alignment that the work-group function loads a value with, minus one,
+     or 0 where it isn't known (structs) or there's no value (__local). */
+  size_t *arg_alignment_masks;
+  /* The scratch area holds the __local buffers followed by the printf
+     buffer. */
+  size_t local_mem_size;
+  size_t printf_buffer_size;
+  size_t scratch_size;
+  struct pocl_context pc;
+  void *wg;
+  void *device_data;
+  unsigned fp_mode;
 };
 
 typedef struct event_callback_item event_callback_item;

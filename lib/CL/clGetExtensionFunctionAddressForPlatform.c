@@ -67,6 +67,18 @@ CL_API_SUFFIX__VERSION_1_2
   if (strcmp (func_name, "clSetContentSizeBufferPoCL") == 0)
     return (void *)&POname (clSetContentSizeBufferPoCL);
 
+  /* cl_pocl_host_kernel */
+  if (strcmp (func_name, "clCreateHostKernelPOCL") == 0)
+    return (void *)&POname (clCreateHostKernelPOCL);
+  if (strcmp (func_name, "clGetHostKernelInfoPOCL") == 0)
+    return (void *)&POname (clGetHostKernelInfoPOCL);
+  if (strcmp (func_name, "clRetainHostKernelPOCL") == 0)
+    return (void *)&POname (clRetainHostKernelPOCL);
+  if (strcmp (func_name, "clReleaseHostKernelPOCL") == 0)
+    return (void *)&POname (clReleaseHostKernelPOCL);
+  if (strcmp (func_name, "clRunHostKernelPOCL") == 0)
+    return (void *)&POname (clRunHostKernelPOCL);
+
   if (strcmp (func_name, "clGetPlatformInfo") == 0)
     return (void *)&POname(clGetPlatformInfo);
 

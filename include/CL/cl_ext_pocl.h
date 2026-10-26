@@ -473,6 +473,106 @@ extern CL_API_ENTRY cl_int CL_API_CALL clSetKernelArgDevicePointerEXT (
 
 #endif // cl_khr_command_buffer
 
+/* cl_pocl_host_kernel (draft): run work-groups of a kernel synchronously on
+ * the calling thread, without command queues or events, so that the
+ * application can schedule them on its own threads. Only CPU devices whose
+ * kernels execute in the host process support it.
+ *
+ * clCreateHostKernelPOCL prepares a kernel for one local size on one device:
+ * it compiles (or looks up) the work-group function, runs the initializers of
+ * program-scope variables and records the sizes of the __local arguments
+ * (which must have been set with clSetKernelArg). The handle doesn't depend on
+ * the kernel's argument values. It retains the kernel, so the application may
+ * release the kernel and program, but can't rebuild the program, while the
+ * handle is alive.
+ *
+ * clRunHostKernelPOCL runs the work-groups with linear indices
+ * [first_group, first_group + group_count) of a grid of num_groups groups
+ * (dimension 0 varying fastest) on the calling thread and returns when they
+ * are done. It takes no locks and doesn't allocate. arg_values[i] points to
+ * the value of argument i, as clSetKernelArg would take it, except that
+ * pointer arguments take the address the kernel uses (an SVM, USM or device
+ * address) and that the value of a struct must be aligned to the struct's
+ * alignment (values of other types are copied if they aren't aligned);
+ * entries for __local arguments are ignored. scratch must point to
+ * CL_HOST_KERNEL_SCRATCH_SIZE_POCL bytes aligned to
+ * CL_HOST_KERNEL_SCRATCH_ALIGNMENT_POCL that no concurrent call uses; it
+ * holds the __local memory and the printf buffer. On x86 and AArch64, the
+ * kernel runs in its own floating-point environment (round to nearest,
+ * denormal handling per the build options, all exceptions masked), and the
+ * caller's (including its exception flags) is restored on return.
+ *
+ * Work-groups may be run in any order, from any number of threads and
+ * concurrently, so they must not wait on each other. Only kernels without
+ * image, sampler or pipe arguments are supported. The call returns
+ * CL_OUT_OF_RESOURCES, after finishing its range, if a work-group reported a
+ * failure, which happens in the same cases (depending on the work-item
+ * handler) as a command queue launch of the kernel failing.
+ *
+ * The enum values below are provisional and not registered with Khronos. */
+
+#ifndef cl_pocl_host_kernel
+#define cl_pocl_host_kernel 1
+
+#define CL_POCL_HOST_KERNEL_EXTENSION_NAME "cl_pocl_host_kernel"
+
+typedef struct _cl_host_kernel_pocl *cl_host_kernel_pocl;
+typedef cl_uint cl_host_kernel_info_pocl;
+
+/* cl_host_kernel_info_pocl */
+#define CL_HOST_KERNEL_REFERENCE_COUNT_POCL 0x4510
+#define CL_HOST_KERNEL_SCRATCH_SIZE_POCL 0x4511
+#define CL_HOST_KERNEL_SCRATCH_ALIGNMENT_POCL 0x4512
+
+/* error codes */
+#define CL_INVALID_HOST_KERNEL_POCL -1200
+
+typedef cl_host_kernel_pocl (CL_API_CALL *clCreateHostKernelPOCL_fn) (
+    cl_kernel kernel, cl_device_id device, cl_uint work_dim,
+    const size_t *local_work_size, cl_int *errcode_ret);
+
+typedef cl_int (CL_API_CALL *clGetHostKernelInfoPOCL_fn) (
+    cl_host_kernel_pocl host_kernel, cl_host_kernel_info_pocl param_name,
+    size_t param_value_size, void *param_value,
+    size_t *param_value_size_ret);
+
+typedef cl_int (CL_API_CALL *clRetainHostKernelPOCL_fn) (
+    cl_host_kernel_pocl host_kernel);
+
+typedef cl_int (CL_API_CALL *clReleaseHostKernelPOCL_fn) (
+    cl_host_kernel_pocl host_kernel);
+
+typedef cl_int (CL_API_CALL *clRunHostKernelPOCL_fn) (
+    cl_host_kernel_pocl host_kernel, const void *const *arg_values,
+    const size_t *num_groups, const size_t *global_work_offset,
+    size_t first_group, size_t group_count, void *scratch);
+
+#ifndef CL_NO_PROTOTYPES
+
+extern CL_API_ENTRY cl_host_kernel_pocl CL_API_CALL clCreateHostKernelPOCL (
+    cl_kernel kernel, cl_device_id device, cl_uint work_dim,
+    const size_t *local_work_size, cl_int *errcode_ret);
+
+extern CL_API_ENTRY cl_int CL_API_CALL clGetHostKernelInfoPOCL (
+    cl_host_kernel_pocl host_kernel, cl_host_kernel_info_pocl param_name,
+    size_t param_value_size, void *param_value,
+    size_t *param_value_size_ret);
+
+extern CL_API_ENTRY cl_int CL_API_CALL
+clRetainHostKernelPOCL (cl_host_kernel_pocl host_kernel);
+
+extern CL_API_ENTRY cl_int CL_API_CALL
+clReleaseHostKernelPOCL (cl_host_kernel_pocl host_kernel);
+
+extern CL_API_ENTRY cl_int CL_API_CALL clRunHostKernelPOCL (
+    cl_host_kernel_pocl host_kernel, const void *const *arg_values,
+    const size_t *num_groups, const size_t *global_work_offset,
+    size_t first_group, size_t group_count, void *scratch);
+
+#endif /* CL_NO_PROTOTYPES */
+
+#endif /* cl_pocl_host_kernel */
+
 #ifdef __cplusplus
 }
 #endif

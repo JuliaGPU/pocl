@@ -1848,7 +1848,7 @@ if(NOT ENABLE_CONFORMANCE)
   set(HOST_DEVICE_EXTENSIONS "${HOST_DEVICE_EXTENSIONS} \
       cl_pocl_svm_rect cl_pocl_command_buffer_svm \
       cl_khr_command_buffer cl_khr_command_buffer_multi_device cl_khr_command_buffer_mutable_dispatch \
-      cl_pocl_command_buffer_host_buffer")
+      cl_pocl_command_buffer_host_buffer cl_pocl_host_kernel")
 
   if (HAVE_LIBXSMM OR HAVE_ONNXRT OR HAVE_LIBJPEG_TURBO OR HAVE_OPENCV)
     set(HOST_DEVICE_EXTENSIONS "${HOST_DEVICE_EXTENSIONS} \

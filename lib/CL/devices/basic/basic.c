@@ -110,6 +110,9 @@ pocl_basic_init_device_ops(struct pocl_device_ops *ops)
 
   ops->run = pocl_basic_run;
   ops->run_native = pocl_basic_run_native;
+  ops->create_host_kernel = pocl_cpu_create_host_kernel;
+  ops->free_host_kernel = pocl_cpu_free_host_kernel;
+  ops->run_host_kernel = pocl_cpu_run_host_kernel;
 
   ops->build_source = pocl_driver_build_source;
   ops->link_program = pocl_driver_link_program;
@@ -656,6 +659,7 @@ pocl_basic_free_program (cl_device_id device, cl_program program,
   pocl_driver_free_program (device, program, dev_i);
   program->global_var_total_size[dev_i] = 0;
   pocl_aligned_free (program->gvar_storage[dev_i]);
+  program->gvar_storage[dev_i] = NULL;
   return 0;
 }
 /*********************** IMAGES ********************************/
