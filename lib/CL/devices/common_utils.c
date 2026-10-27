@@ -217,7 +217,8 @@ typedef struct
 } host_fp_env;
 #endif
 
-static inline void
+/* Returns whether it changed the caller's environment. */
+static inline int
 enter_kernel_fp_mode (unsigned ftz, host_fp_env *caller)
 {
 #if defined(HOST_KERNEL_FP_X86)
@@ -227,8 +228,10 @@ enter_kernel_fp_mode (unsigned ftz, host_fp_env *caller)
        & ~(_MM_FLUSH_ZERO_MASK | _MM_DENORMALS_ZERO_MASK | _MM_ROUND_MASK))
       | _MM_MASK_MASK | _MM_ROUND_NEAREST
       | (ftz ? (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON) : 0);
-  if (kernel != caller->mxcsr)
-    _mm_setcsr (kernel);
+  if (kernel == caller->mxcsr)
+    return 0;
+  _mm_setcsr (kernel);
+  return 1;
 #elif defined(HOST_KERNEL_FP_AARCH64)
   __asm__ volatile ("mrs %0, fpcr" : "=r"(caller->fpcr));
   __asm__ volatile ("mrs %0, fpsr" : "=r"(caller->fpsr));
@@ -238,20 +241,26 @@ enter_kernel_fp_mode (unsigned ftz, host_fp_env *caller)
       | (ftz ? (FPCR_FZ | FPCR_FZ16) : 0);
   if (kernel != caller->fpcr)
     __asm__ volatile ("msr fpcr, %0" : : "r"(kernel));
+  return 1;
 #else
   (void)ftz;
   (void)caller;
+  return 0;
 #endif
 }
 
-/* Restores the caller's environment, including its exception flags. */
+/* Restores the caller's environment, including its exception flags, if
+   `enter_kernel_fp_mode` changed it. Otherwise the kernel ran in the caller's
+   environment and can only have raised further flags, which the contract
+   allows: leaving them saves reading MXCSR again (a few nanoseconds). */
 static inline void
-leave_kernel_fp_mode (const host_fp_env *caller)
+leave_kernel_fp_mode (const host_fp_env *caller, int changed)
 {
 #if defined(HOST_KERNEL_FP_X86)
-  if (_mm_getcsr () != caller->mxcsr)
+  if (changed)
     _mm_setcsr (caller->mxcsr);
 #elif defined(HOST_KERNEL_FP_AARCH64)
+  (void)changed;
   uint64_t fpcr, fpsr;
   __asm__ volatile ("mrs %0, fpcr" : "=r"(fpcr));
   __asm__ volatile ("mrs %0, fpsr" : "=r"(fpsr));
@@ -261,6 +270,7 @@ leave_kernel_fp_mode (const host_fp_env *caller)
     __asm__ volatile ("msr fpsr, %0" : : "r"(caller->fpsr));
 #else
   (void)caller;
+  (void)changed;
 #endif
 }
 
@@ -383,7 +393,7 @@ pocl_cpu_run_host_kernel (cl_host_kernel_pocl hk,
   pc.printf_buffer_position = &position;
 
   host_fp_env caller_fp_env;
-  enter_kernel_fp_mode (hk->fp_mode, &caller_fp_env);
+  int fp_changed = enter_kernel_fp_mode (hk->fp_mode, &caller_fp_env);
 
   pocl_workgroup_func wg = (pocl_workgroup_func)hk->wg;
   /* Without dividing when the range starts in the first row or plane, as
@@ -422,7 +432,7 @@ pocl_cpu_run_host_kernel (cl_host_kernel_pocl hk,
         }
     }
 
-  leave_kernel_fp_mode (&caller_fp_env);
+  leave_kernel_fp_mode (&caller_fp_env, fp_changed);
 
   return pc.execution_failed ? CL_OUT_OF_RESOURCES : CL_SUCCESS;
 }
