@@ -499,8 +499,10 @@ extern CL_API_ENTRY cl_int CL_API_CALL clSetKernelArgDevicePointerEXT (
  * CL_HOST_KERNEL_SCRATCH_ALIGNMENT_POCL that no concurrent call uses; it
  * holds the __local memory and the printf buffer. On x86 and AArch64, the
  * kernel runs in its own floating-point environment (round to nearest,
- * denormal handling per the build options, all exceptions masked), and the
- * caller's (including its exception flags) is restored on return.
+ * denormal handling per the build options, all exceptions masked). The
+ * caller's control modes and the exception flags it had raised are preserved;
+ * as with a function call, the call may raise further flags, which ones being
+ * unspecified.
  *
  * Work-groups may be run in any order, from any number of threads and
  * concurrently, so they must not wait on each other. Only kernels without

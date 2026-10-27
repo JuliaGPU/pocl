@@ -250,7 +250,7 @@ test_group_sums (cl_kernel kernel, cl_device_id device)
 }
 
 /* The kernel runs with round-to-nearest, and the caller's rounding mode and
-   exception flags survive the call. */
+   the exception flags it had raised survive the call. */
 static int
 test_fp_env (cl_kernel kernel, cl_device_id device)
 {
@@ -272,7 +272,6 @@ test_fp_env (cl_kernel kernel, cl_device_id device)
   err = run_hk (hk, args, &num_groups, NULL, 0, 1, scratch);
   int rounding = fegetround ();
   int divbyzero = fetestexcept (FE_DIVBYZERO);
-  int inexact = fetestexcept (FE_INEXACT);
   fesetround (FE_TONEAREST);
   feclearexcept (FE_ALL_EXCEPT);
   CHECK_CL_ERROR (err);
@@ -282,7 +281,16 @@ test_fp_env (cl_kernel kernel, cl_device_id device)
   TEST_ASSERT (out == nearest);
   TEST_ASSERT (rounding == FE_UPWARD);
   TEST_ASSERT (divbyzero);
-  TEST_ASSERT (!inexact);
+
+  /* Also when the caller's environment is the kernel's. */
+  feraiseexcept (FE_DIVBYZERO);
+  err = run_hk (hk, args, &num_groups, NULL, 0, 1, scratch);
+  rounding = fegetround ();
+  divbyzero = fetestexcept (FE_DIVBYZERO);
+  feclearexcept (FE_ALL_EXCEPT);
+  CHECK_CL_ERROR (err);
+  TEST_ASSERT (rounding == FE_TONEAREST);
+  TEST_ASSERT (divbyzero);
 
 #ifdef __GLIBC__
   /* Exceptions the caller unmasked don't trap in the kernel. */
