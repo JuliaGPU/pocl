@@ -386,10 +386,21 @@ pocl_cpu_run_host_kernel (cl_host_kernel_pocl hk,
   enter_kernel_fp_mode (hk->fp_mode, &caller_fp_env);
 
   pocl_workgroup_func wg = (pocl_workgroup_func)hk->wg;
-  size_t x = first_group % pc.num_groups[0];
-  size_t yz = first_group / pc.num_groups[0];
-  size_t y = yz % pc.num_groups[1];
-  size_t z = yz / pc.num_groups[1];
+  /* Without dividing when the range starts in the first row or plane, as
+     small launches do: a 64-bit division takes up to ~90 cycles, against a
+     few hundred for a whole launch of a trivial kernel. */
+  size_t x = first_group, y = 0, z = 0;
+  if (x >= pc.num_groups[0])
+    {
+      size_t yz = x / pc.num_groups[0];
+      x -= yz * pc.num_groups[0];
+      y = yz;
+      if (yz >= pc.num_groups[1])
+        {
+          z = yz / pc.num_groups[1];
+          y = yz - z * pc.num_groups[1];
+        }
+    }
   for (size_t i = 0; i < group_count; ++i)
     {
       wg ((uint8_t *)args, (uint8_t *)&pc, x, y, z);
