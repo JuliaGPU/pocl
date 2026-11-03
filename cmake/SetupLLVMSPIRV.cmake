@@ -94,6 +94,18 @@ if(HAVE_LLVM_SPIRV_LIB)
       set(LLVM_SPIRV_LIB_HAS_ERROR_HANDLING 0 CACHE BOOL "libLLVMSPIRV has TranslatorOpts::setErrorHandlingKind")
     endif()
   endif()
+
+  # The translator reads SPV_KHR_bfloat16 since LLVM 21, and since 18.1.14,
+  # 19.1.8 and 20.1.3 on the older release branches. Not cached, so that it
+  # follows changes of the translator.
+  file(READ "${LLVM_SPIRV_INCLUDEDIR}/LLVMSPIRVExtensions.inc" LLVMSPIRVEXTENSIONS_CONTENT)
+  if(LLVMSPIRVEXTENSIONS_CONTENT MATCHES "EXT\\(SPV_KHR_bfloat16\\)")
+    message(STATUS "libLLVMSPIRV supports SPV_KHR_bfloat16")
+    set(LLVM_SPIRV_LIB_HAS_KHR_BFLOAT16 1)
+  else()
+    message(STATUS "libLLVMSPIRV is too old for SPV_KHR_bfloat16")
+    set(LLVM_SPIRV_LIB_HAS_KHR_BFLOAT16 0)
+  endif()
 else()
   message(STATUS "LLVMSPIRV library NOT found: ${LLVM_SPIRV_INCLUDEDIR} | ${LLVM_SPIRV_LIB}")
 endif()
@@ -104,6 +116,15 @@ set_expr(HAVE_LLVM_SPIRV_LIB_ERROR_HANDLING
 set_expr(HAVE_SPIRV_LINK TARGET_SPIRV_LINK)
 set_expr(HAVE_LLVM_SPIRV TARGET_LLVM_SPIRV)
 set_expr(HAVE_LLVM_OPT TARGET_LLVM_OPT)
+
+# Without the library, the llvm-spirv binary is used, whose extensions can't be
+# queried; every translator release for LLVM 21 and later reads SPV_KHR_bfloat16.
+if(HAVE_LLVM_SPIRV_LIB)
+  set_expr(HAVE_LLVM_SPIRV_KHR_BFLOAT16 LLVM_SPIRV_LIB_HAS_KHR_BFLOAT16)
+else()
+  set_expr(HAVE_LLVM_SPIRV_KHR_BFLOAT16
+    HAVE_LLVM_SPIRV AND (LLVM_VERSION_MAJOR GREATER_EQUAL 21))
+endif()
 
 if(HAVE_SPIRV_LINK AND (NOT DEFINED SPIRV_LINK_HAS_USE_HIGHEST_VERSION)
   AND NOT CMAKE_CROSSCOMPILING)
