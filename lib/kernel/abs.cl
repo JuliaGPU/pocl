@@ -24,12 +24,10 @@
 
 #include "templates.h"
 
-#define __builtin_abshh(a)   ((uchar )(a>=(char )0 ? a : (char )-a))
-#define __builtin_absh(a)    ((ushort)(a>=(short)0 ? a : (short)-a))
-#define __builtin_absl(a)    ((ulong )(a>=(long )0 ? a : (long )-a))
-#define __builtin_absuhh(a)  a
-#define __builtin_absuh(a)   a
-#define __builtin_absu(a)    a
-#define __builtin_absul(a)   a
-
-DEFINE_BUILTIN_UG_G(abs)
+/* abs(INT_MIN) is 2^31 as uint. Negate in the unsigned type: negating the
+   signed value overflows for the minimum value, and __builtin_abs is
+   undefined for it. */
+DEFINE_EXPR_UG_G (abs, ({
+                    ugtype u = __builtin_astype (a, ugtype);
+                    a < (gtype)0 ? -u : u;
+                  }))
