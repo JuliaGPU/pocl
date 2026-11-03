@@ -129,6 +129,44 @@ static double poclExtendHFDF2(_Float16 A) {
 }
 #endif
 
+#if defined(__x86_64__) || defined(_M_X64)
+/* On x86-64 CPUs without native bfloat16 conversions, codegen calls
+   __truncsfbf2 and __truncdfbf2 for float/double -> bfloat. libgcc only has
+   them since GCC 13, and on Windows they have the problems of the FP16 helpers
+   above, so hand kernels our own. A bfloat16 is returned in the low 16 bits of
+   XMM0, like a float whose low half holds its bits, which spares us from
+   needing __bf16 support in the compiler that builds PoCL. */
+static float poclBF16Result(uint32_t H) {
+  float R;
+  __builtin_memcpy(&R, &H, sizeof R);
+  return R;
+}
+/* Rounds the bits of a float to the bits of a bfloat16, to nearest even. */
+static uint32_t poclFloatBitsToBF16(uint32_t U) {
+  if ((U & 0x7fffffffu) > 0x7f800000u) // NaN: keep it, but quiet
+    return (U >> 16) | 0x40u;
+  return (U + 0x7fffu + ((U >> 16) & 1u)) >> 16;
+}
+static float poclTruncSFBF2(float A) {
+  uint32_t U;
+  __builtin_memcpy(&U, &A, sizeof U);
+  return poclBF16Result(poclFloatBitsToBF16(U));
+}
+static float poclTruncDFBF2(double A) {
+  /* Round to float with round-to-odd first, so that rounding that to
+     bfloat16 gives the correctly rounded result. */
+  float F = (float)A;
+  uint32_t U;
+  __builtin_memcpy(&U, &F, sizeof U);
+  if (F == F && (double)F != A) {
+    if (__builtin_fabs((double)F) > __builtin_fabs(A))
+      U -= 1;
+    U |= 1;
+  }
+  return poclBF16Result(poclFloatBitsToBF16(U));
+}
+#endif
+
 namespace {
 
 /* Process-global JIT shared by all CPU host devices, created on the first
@@ -436,8 +474,9 @@ static bool addLazySVMLGenerator(const char *IRCPath, const char *SVMLPath) {
 }
 
 /* Inject symbols that kernel objects reference but that are linked into libpocl
-   rather than exported by a process library: PoCL's own host callbacks and, on
-   Windows, the libgcc/compiler-rt stack probe. Defining them as absolute
+   rather than exported by a process library: PoCL's own host callbacks, the
+   bfloat16 conversions on x86-64 and, on Windows, the libgcc/compiler-rt stack
+   probe and FP16 conversions. Defining them as absolute
    symbols makes resolution independent of libpocl's (deliberately hidden)
    dynamic-symbol visibility. They are constant for the process, so this is done
    once at init into the process-symbols JITDylib that every kernel JITDylib
@@ -466,6 +505,14 @@ void defineHostSymbols(JITDylib &JD) {
       JITSymbolFlags::Exported | JITSymbolFlags::Callable};
   Syms[TheJIT->mangleAndIntern("__extendhfdf2")] = {
       ExecutorAddr::fromPtr(&poclExtendHFDF2),
+      JITSymbolFlags::Exported | JITSymbolFlags::Callable};
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
+  Syms[TheJIT->mangleAndIntern("__truncsfbf2")] = {
+      ExecutorAddr::fromPtr(&poclTruncSFBF2),
+      JITSymbolFlags::Exported | JITSymbolFlags::Callable};
+  Syms[TheJIT->mangleAndIntern("__truncdfbf2")] = {
+      ExecutorAddr::fromPtr(&poclTruncDFBF2),
       JITSymbolFlags::Exported | JITSymbolFlags::Callable};
 #endif
   if (Syms.empty())
