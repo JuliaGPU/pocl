@@ -1926,6 +1926,11 @@ endif()
 if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_extended_bit_ops")
   set(HOST_DEVICE_SPV_EXTENSIONS "${HOST_DEVICE_SPV_EXTENSIONS},+SPV_KHR_bit_instructions")
 endif()
+# SPV_KHR_bfloat16: a bfloat16 type for loads, stores and conversions to and
+# from other floating-point types. The translator maps it to LLVM's bfloat.
+if(HAVE_LLVM_SPIRV_KHR_BFLOAT16)
+  set(HOST_DEVICE_SPV_EXTENSIONS "${HOST_DEVICE_SPV_EXTENSIONS},+SPV_KHR_bfloat16")
+endif()
 # The SPIR-V side of cl_intel_subgroups: shuffles (also of vectors) and buffer block
 # reads/writes. cl_intel_spirv_subgroups is not advertised, as it also requires the
 # image block reads/writes.

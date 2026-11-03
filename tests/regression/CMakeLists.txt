@@ -40,6 +40,7 @@ set(C_PROGRAMS_TO_BUILD test_assign_loop_variable_to_privvar_makes_it_local
      test_uniform_implicit_barrier_entry
      test_localmem_load_across_barrier
      test_spirv_intel_subgroups
+     test_spirv_bfloat16
      test_indirect_ptrs
      test_replicated_wi_subgroup_alloca
      test_usm_indirect_ptrs
@@ -61,6 +62,10 @@ endforeach()
 
 target_include_directories(test_indirect_ptrs
   PRIVATE $<TARGET_PROPERTY:${POCL_LIBRARY_NAME},INCLUDE_DIRECTORIES>)
+
+if(HAVE_LLVM_SPIRV_KHR_BFLOAT16)
+  target_compile_definitions(test_spirv_bfloat16 PRIVATE EXPECT_CPU_SPV_KHR_BFLOAT16)
+endif()
 
 set(PROGRAMS_TO_BUILD test_barrier_between_for_loops test_early_return
   test_for_with_var_iteration_count test_id_dependent_computation
@@ -203,6 +208,8 @@ add_test_pocl(NAME "regression/barrier_divergent_skip" WORKITEM_HANDLER "loops;l
 add_test_pocl(NAME "regression/barrier_early_exit" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_barrier_early_exit")
 
 add_test_pocl(NAME "regression/spirv_intel_subgroups" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_spirv_intel_subgroups" LABELS ${SPIRV_LABELS})
+
+add_test_pocl(NAME "regression/spirv_bfloat16" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_spirv_bfloat16" LABELS ${SPIRV_LABELS})
 
 add_test_pocl(NAME "regression/divergent_implicit_barrier_entry" WORKITEM_HANDLER "loops;loopvec;cbs;" COMMAND "test_divergent_implicit_barrier_entry")
 
